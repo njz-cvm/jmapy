@@ -1,7 +1,5 @@
-
-import uuid
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, Self, overload
+from typing import Any, NamedTuple, Self, overload
 
 from jmapy.models import ID
 
@@ -167,6 +165,7 @@ class MethodCall(NamedTuple):
     method_name: str
     args: dict[str, Any]
     call_id: str
+    resp_cls: type[Any]
 
 
 class MethodChain[S, *Ts]:
@@ -183,7 +182,7 @@ class MethodChain[S, *Ts]:
             last_call = self.calls[-1]
 
             # Dynamically subclass to pass context to the descriptors
-            class BoundResponse(GetResponse[T]):
+            class BoundResponse(last_call.resp_cls):
                 __call_id__ = last_call.call_id
                 __method_name__ = last_call.method_name
                 __path_prefix__ = ""
@@ -192,98 +191,3 @@ class MethodChain[S, *Ts]:
             return MethodChain(self.calls + next_chain.calls)
         else:
             return MethodChain(self.calls + cmd.calls)
-
-class GetResponse[T]:
-    account_id = Reference[Self, str]()
-    state = Reference[Self, str]()
-    list = ListReference[Self, T]()
-    not_found = ListReference[Self, ID]()
-
-    # Explicit constructor mappings for actual responses
-
-    if not TYPE_CHECKING:
-
-        def __init__(
-            self,
-            account_id: str = "",
-            state: str = "",
-            list: "list[T] | None" = None,
-            not_found: "list[ID] | None" = None
-        ) -> None:
-            self.account_id = account_id
-            self.state = state
-            self.list = list if list is not None else []
-            self.not_found = not_found if not_found is not None else []
-
-
-class GettableData(Protocol):
-    @classmethod
-    def get(
-        cls,
-        account_id: ID | Reference[Any, ID],
-        ids: list[ID] | ListReference[Any, ID] | Reference[Any, ID],
-        properties: list[str] | None | ListReference[Any, str] | Reference[Any, str] = None,
-    ) -> MethodChain[GetResponse[Self]]:
-        method_name = f"{cls.__name__}/get"
-        args: dict[str, Any] = {}
-
-        def bind_arg(key: str, value: Any):
-            # Check if this parameter is a lazy JMAP Result Reference
-            if hasattr(value, "to_dict") and getattr(value, "result_of", None):
-                args[f"#{key}"] = value.to_dict()
-            elif hasattr(value, "to_dict"):
-                args[key] = value.to_dict()
-            else:
-                args[key] = value
-
-        bind_arg("accountId", account_id)
-        bind_arg("ids", ids)
-        if properties is not None:
-            bind_arg("properties", properties)
-
-        # Generate a unique client-side call ID for this method
-        call_id = f"c_{uuid.uuid4().hex[:6]}"
-        return MethodChain([MethodCall(method_name, args, call_id)])
-
-
-class ChangesResponse:
-    account_id = Reference[Self, ID]()
-    old_state = Reference[Self, str]()
-    new_state = Reference[Self, str]()
-    has_more_changes = Reference[Self, bool]()
-    created = ListReference[Self, ID]()
-    updated = ListReference[Self, ID]()
-    destroyed = ListReference[Self, ID]()
-
-
-class QueryResponse:
-    account_id = Reference[Self, ID]()
-    query_state = Reference[Self, str]()
-    can_calculate_changes = Reference[Self, bool]()
-    position = Reference[Self, int]()
-    ids = ListReference[Self, ID]()
-    total = Reference[Self, int]()
-    limit = Reference[Self, int]()
-
-class AddedItem:
-    id = Reference[Self, ID]()
-    index = Reference[Self, int]()
-
-class QueryChangesResponse[T]:
-    account_id = Reference[Self, ID]()
-    old_query_state = Reference[Self, str]()
-    new_query_state = Reference[Self, str]()
-    total = Reference[Self, int]()
-    removed = ListReference[Self, ID]()
-    added = ListReference[Self, AddedItem]()
-
-class SetResponse[T]:
-    account_id: Reference["SetResponse[T]", str] = Reference()
-    old_state: Reference["SetResponse[T]", str] = Reference()
-    new_state: Reference["SetResponse[T]", str] = Reference()
-    created: DictReference["SetResponse[T]", T] = DictReference()
-    updated: DictReference["SetResponse[T]", T] = DictReference()
-    destroyed: ListReference["SetResponse[T]", ID] = ListReference()
-    not_created: DictReference["SetResponse[T]", dict[str, Any]] = DictReference()
-    not_updated: DictReference["SetResponse[T]", dict[str, Any]] = DictReference()
-    not_destroyed: DictReference["SetResponse[T]", dict[str, Any]] = DictReference()
