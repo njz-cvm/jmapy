@@ -10,19 +10,9 @@ def _to_camel(snake_str: str) -> str:
     return words[0] + ''.join(w.title() for w in words[1:])
 
 
-class Property[T, P]:
-
-    @overload
-    def __get__(self, obj: type[T]) -> Self: ...
-
-    @overload
-    def __get__(self, obj: T, objtype: type[T]) -> P: ...
-
-    def __get__(self, obj: T | type[T], objtype: type[T] | None = None) -> Self | P: ...
-
-
 class Reference[T, P]:
     def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "") -> None:
+        self.nullable: bool = True
         self.result_of = result_of
         self.method_name = method_name
         self.path = path
@@ -52,7 +42,11 @@ class Reference[T, P]:
                 path=f"{path_prefix}{self.path}",
                 attr_name=self.attr_name
             )
-        return obj.__dict__.get(self.attr_name)  # pyright: ignore[reportReturnType]
+        
+        value = obj.__dict__.get(self.attr_name)
+        if value is None and not self.nullable:
+            raise ValueError("Value not founded, but attribute is not nullable.")
+        return value  # pyright: ignore[reportReturnType]
 
     def __set__(self, obj: T, value: P) -> None:
         obj.__dict__[self.attr_name] = value
@@ -60,6 +54,24 @@ class Reference[T, P]:
     def to_dict(self) -> dict[str, str]:
         """Serializes to an RFC 8620 Result Reference."""
         return {"resultOf": self.result_of, "name": self.method_name, "path": self.path}
+
+class NullReference[T, P](Reference[T, P]):
+
+    def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "") -> None:
+        super().__init__(
+            result_of=result_of,
+            method_name=method_name,
+            path=path,
+            attr_name=attr_name
+        )
+        self.nullable = True
+
+    @overload
+    def __get__(self, obj: None, objtype: type[T]) -> Self: ...
+    @overload
+    def __get__(self, obj: T, objtype: type[T] | None = None) -> P | None: ...
+    def __get__(self, obj: T | None, objtype: type[T] | None = None) -> Self | P | None:  # pyright: ignore[reportIncompatibleMethodOverride]
+        return super().__get__(obj, objtype)  # pyright: ignore[reportCallIssue, reportUnknownVariableType, reportArgumentType]
 
 
 class BoundListReferenceAll:

@@ -2,16 +2,22 @@ from typing import Self
 
 from jmapy.models import ID
 
-from .base import ListReference, Reference
+from .base import DictReference, ListReference, NullReference, Reference
 
+
+class SetError:
+    type = Reference[Self, str]()
+    description = Reference[Self, str | None]()
 
 class SetResponse[T]:
-    account_id: Reference["SetResponse[T]", str] = Reference()
-    old_state: Reference["SetResponse[T]", str] = Reference()
-    new_state: Reference["SetResponse[T]", str] = Reference()
-    created: DictReference["SetResponse[T]", T] = DictReference()
-    updated: DictReference["SetResponse[T]", T] = DictReference()
-    destroyed: ListReference["SetResponse[T]", ID] = ListReference()
-    not_created: DictReference["SetResponse[T]", dict[str, Any]] = DictReference()
-    not_updated: DictReference["SetResponse[T]", dict[str, Any]] = DictReference()
-    not_destroyed: DictReference["SetResponse[T]", dict[str, Any]] = DictReference()
+    account_id = Reference[Self, ID]()
+    old_state = NullReference[Self, str]()
+    new_state = Reference[Self, str]()
+    created = DictReference[Self, T]()
+    updated = DictReference[Self, T]()
+    destroyed = ListReference[Self, ID]()
+    not_created = DictReference[Self, SetError]()
+    not_updated = DictReference[Self, SetError]()
+    not_destroyed = DictReference[Self, SetError]()
+
+SetResponse().old_state
