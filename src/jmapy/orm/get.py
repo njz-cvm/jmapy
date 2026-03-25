@@ -1,36 +1,26 @@
 
 import uuid
-from typing import TYPE_CHECKING, Any, Protocol, Self
+from typing import Any, Self
 
 from jmapy.models import ID
+from jmapy.orm.base import ListReference, Reference
 
-from .base import ListReference, MethodCall, MethodChain, Reference
+from .base import (
+    MethodCall,
+    MethodChain,
+    _DataType,  # pyright: ignore[reportPrivateUsage]
+    bind_arg,
+)
 
 
-class GetResponse[T]:
+class GetResponse[T](_DataType):
     account_id = Reference[Self, str]()
     state = Reference[Self, str]()
     list = ListReference[Self, T]()
     not_found = ListReference[Self, ID]()
 
-    # Explicit constructor mappings for actual responses
 
-    if not TYPE_CHECKING:
-
-        def __init__(
-            self,
-            account_id: str = "",
-            state: str = "",
-            list: "list[T] | None" = None,
-            not_found: "list[ID] | None" = None
-        ) -> None:
-            self.account_id = account_id
-            self.state = state
-            self.list = list if list is not None else []
-            self.not_found = not_found if not_found is not None else []
-
-
-class GettableData(Protocol):
+class GettableData:
     @classmethod
     def get(
         cls,
@@ -39,22 +29,19 @@ class GettableData(Protocol):
         properties: list[str] | None | ListReference[Any, str] | Reference[Any, str] = None,
     ) -> MethodChain[GetResponse[Self]]:
         method_name = f"{cls.__name__}/get"
-        args: dict[str, Any] = {}
-
-        def bind_arg(key: str, value: Any):
-            # Check if this parameter is a lazy JMAP Result Reference
-            if hasattr(value, "to_dict") and getattr(value, "result_of", None):
-                args[f"#{key}"] = value.to_dict()
-            elif hasattr(value, "to_dict"):
-                args[key] = value.to_dict()
-            else:
-                args[key] = value
-
-        bind_arg("accountId", account_id)
-        bind_arg("ids", ids)
-        if properties is not None:
-            bind_arg("properties", properties)
-
-        # Generate a unique client-side call ID for this method
         call_id = f"c_{uuid.uuid4().hex[:6]}"
-        return MethodChain([MethodCall(method_name, args, call_id, GetResponse)])
+
+        return MethodChain(
+            [
+                MethodCall(
+                    method_name,
+                    {
+                        **bind_arg("accountId", account_id),
+                        **bind_arg("ids", ids),
+                        **(bind_arg("properties", properties) if properties else {})
+                    },
+                    call_id,
+                    GetResponse
+                )
+            ]
+        )

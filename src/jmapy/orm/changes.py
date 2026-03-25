@@ -1,8 +1,15 @@
-from typing import Self
+import uuid
+from typing import Any, Protocol, Self
 
 from jmapy.models import ID
 
-from .base import ListReference, Reference
+from .base import (
+    ListReference,
+    MethodCall,
+    MethodChain,
+    Reference,
+    bind_arg,
+)
 
 
 class ChangesResponse:
@@ -13,3 +20,30 @@ class ChangesResponse:
     created = ListReference[Self, ID]()
     updated = ListReference[Self, ID]()
     destroyed = ListReference[Self, ID]()
+
+class ChangableData(Protocol):
+    @classmethod
+    def changes(
+        cls,
+        account_id: ID | Reference[Any, ID],
+        since_state: str | Reference[Any, str],
+        max_changes: int | None | Reference[Any, int] = None,
+    ) -> MethodChain[ChangesResponse]:
+        method_name = f"{cls.__name__}/changes"
+        call_id = f"c_{uuid.uuid4().hex[:6]}"
+
+        return MethodChain(
+            [
+                MethodCall(
+                    method_name,
+                    {
+                        **bind_arg("accountId", account_id),
+                        **bind_arg("sinceState", since_state),
+                        **(bind_arg("maxChanges", max_changes) if max_changes is not None else {})
+                    },
+                    call_id,
+                    ChangesResponse
+                )
+            ]
+        )
+

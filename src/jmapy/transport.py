@@ -1,9 +1,10 @@
 
 import json
-from typing import Self
+from typing import NewType, Self
 
 from jmapy.models import ID
-from jmapy.orm import GettableData, MethodChain, Reference
+from jmapy.orm.base import DataType, MethodChain, Reference, _DataType
+from jmapy.orm.get import GettableData
 
 # session.request(
 #     Foo.changes(account_id, since_state).then(
@@ -29,13 +30,20 @@ from jmapy.orm import GettableData, MethodChain, Reference
 
 class User(GettableData): ...
 
-class Foo(GettableData):
-    attr = Reference[Self, ID]()
+class Foo(GettableData, DataType):
+    attr: Reference[Self, ID] = Reference[Self, ID]()
 
 class Bar(GettableData): ...
 
+foo = Foo(attr="id")
+print(foo)
+
 def exec[T, *Ts](test: MethodChain[T, *Ts]) -> None:
-    print(json.dumps(test.calls, indent=2))
+    print(
+        json.dumps(
+        [call[:-1] for call in test.calls], 
+        indent=2)
+    )
 
 
 if __name__ == "__main__":

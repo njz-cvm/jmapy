@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Any, NamedTuple, Self, overload
+from typing import Any, NamedTuple, Self, dataclass_transform, overload
 
 from jmapy.models import ID
 
@@ -9,6 +9,22 @@ def _to_camel(snake_str: str) -> str:
     words = snake_str.split('_')
     return words[0] + ''.join(w.title() for w in words[1:])
 
+
+def bind_arg(key: str, value: Any) -> dict[str, Any]:
+    if hasattr(value, "to_dict") and getattr(value, "result_of", None):
+        return {f"#{key}": value.to_dict()}
+    elif hasattr(value, "to_dict"):
+        return {key: value.to_dict()}
+    else:
+        return {key: value}
+
+
+def json_ptr_escape(part: str) -> str:
+    return (
+        part
+        .replace("~", "~0")
+        .replace("/", "~1")
+    )
 
 class Reference[T, P]:
     def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "") -> None:
@@ -20,7 +36,9 @@ class Reference[T, P]:
 
     def __set_name__(self, owner: Any, name: str) -> None:
         self.attr_name = name
-        self.path = f"/{_to_camel(name)}"
+        self.path = "/" + json_ptr_escape(
+            _to_camel(name)
+        )
 
     @overload
     def __get__(self, obj: None, objtype: type[T]) -> Self: ...
@@ -85,7 +103,9 @@ class BoundListReferenceAll:
         return Reference(
             result_of=self.result_of,
             method_name=self.method_name,
-            path=f"{self.path}/{_to_camel(name)}",
+            path=f"{self.path}/" + json_ptr_escape(
+                _to_camel(name)
+            ),
             attr_name=name
         )
 
@@ -96,10 +116,13 @@ class ListReference[T, P]:
         self.method_name = method_name
         self.path = path
         self.attr_name = attr_name
+        self.nullable = False
 
     def __set_name__(self, owner: Any, name: str) -> None:
         self.attr_name = name
-        self.path = f"/{_to_camel(name)}"
+        self.path = "/" + json_ptr_escape(
+            _to_camel(name)
+        )
 
     @property
     def all(self) -> type[P]: 
@@ -126,6 +149,9 @@ class ListReference[T, P]:
             )
         return obj.__dict__.get(self.attr_name, [])
 
+    def __getitem__(self, key: int) -> type[P]:
+        return BoundListReferenceAll(self.result_of, self.method_name, f"{self.path}/{key}") # type: ignore
+
     def __set__(self, obj: T, value: list[P]) -> None:
         obj.__dict__[self.attr_name] = value
 
@@ -139,10 +165,13 @@ class DictReference[T, V]:
         self.method_name = method_name
         self.path = path
         self.attr_name = attr_name
+        self.nullable = False
 
     def __set_name__(self, owner: Any, name: str) -> None:
         self.attr_name = name
-        self.path = f"/{_to_camel(name)}"
+        self.path = "/" + json_ptr_escape(
+            _to_camel(name)
+        )
 
     @overload
     def __get__(self, obj: None, objtype: Any) -> Self: ...
@@ -171,6 +200,39 @@ class DictReference[T, V]:
 
     def to_dict(self) -> dict[str, str]:
         return {"resultOf": self.result_of, "name": self.method_name, "path": self.path}
+
+class DataTypeMeta(type):
+    __refs__: list[Reference[type, Any] | ListReference[type, Any] | DictReference[type, Any]]
+
+    def __new__(
+        cls: type[type],
+        name: str,
+        bases: tuple[type, ...],
+        dct: dict[str, Any],
+        **kwargs: Any
+    ) -> type:    
+        dct["__refs__"] = [
+            val
+            for val in dct.items()
+            if isinstance(val, (Reference, ListReference, DictReference))
+        ]
+        new_cls = super().__new__(cls, name, bases, dct, **kwargs)  # pyright: ignore[reportCallIssue, reportUnknownVariableType]
+        return new_cls  # pyright: ignore[reportUnknownVariableType]
+
+class _DataType(metaclass=DataTypeMeta):
+    
+    def __init__(self, **kwargs: Any) -> None:
+        for ref in self.__class__.__refs__:
+            if ref.attr_name in kwargs:
+                setattr(self, ref.attr_name, kwargs[ref.attr_name])
+            elif ref.nullable:
+                setattr(self, ref.attr_name, None)
+            else:
+                msg = f"{self.__class__.__name__} missing keyword arguement: '{ref.attr_name}'"
+                raise TypeError(msg)
+
+@dataclass_transform(field_specifiers=(Reference, ListReference, NullReference, DictReference))
+class DataType(_DataType): ...
 
 
 class MethodCall(NamedTuple):
