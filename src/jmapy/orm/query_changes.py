@@ -1,8 +1,13 @@
-from typing import Self
+import datetime
+import uuid
+from collections.abc import Iterable
+from typing import Any, Self
 
 from jmapy.models import ID
+from jmapy.orm.filtering import Comparator, FilterCondition, FilterOperator
+from jmapy.orm.query import QueryResponse
 
-from .base import ListReference, Reference
+from .base import ListReference, MethodCall, MethodChain, Reference, bind_arg
 
 
 class AddedItem:
@@ -16,3 +21,51 @@ class QueryChangesResponse[T]:
     total = Reference[Self, int]()
     removed = ListReference[Self, ID]()
     added = ListReference[Self, AddedItem]()
+
+
+
+class QueryChangableData:
+    type QCSortableReference = Reference[Self, str] | Reference[Self, int] | Reference[Self, bool] | Reference[Self, datetime.datetime]
+
+    @classmethod
+    def query_changes(
+        cls,
+        account_id: ID | Reference[Any, ID],
+        since_query_state: str,
+        filter: FilterOperator | FilterCondition | None = None,
+        sort: Iterable[Comparator[Self] | QCSortableReference] | None = None,
+        max_changes: int | None = None,
+        up_to_id: ID | None = None,
+        calculate_total: bool | None = None,
+    ) -> MethodChain[QueryResponse]:
+        method_name = f"{cls.__name__}/queryChanges"
+        call_id = f"c_{uuid.uuid4().hex[:6]}"
+
+        if sort is not None:
+            resolved_sort = [  # pyright: ignore[reportUnknownVariableType]
+                (item if isinstance(item, Comparator) else Comparator(item.attr_name))
+                for item in sort
+            ]
+        else:
+            resolved_sort = None
+
+        return MethodChain(
+            [
+                MethodCall(
+                    method_name,
+                    {
+                        **bind_arg("accountId", account_id),
+                        **bind_arg("filter", filter),
+                        **bind_arg("sort", resolved_sort),
+                        **bind_arg("sinceQueryState", since_query_state),
+                        **bind_arg("maxChanges", max_changes),
+                        **bind_arg("upToId", up_to_id),
+                        **bind_arg("calculateTotal", calculate_total),
+                    },
+                    call_id,
+                    QueryResponse
+                )
+            ]
+        )
+
+

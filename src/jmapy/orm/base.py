@@ -1,7 +1,17 @@
-from collections.abc import Callable
-from typing import Any, NamedTuple, Self, dataclass_transform, overload
+from collections.abc import Callable, Iterable, Mapping
+from typing import (
+    Any,
+    NamedTuple,
+    Protocol,
+    Self,
+    dataclass_transform,
+    overload,
+    override,
+    runtime_checkable,
+)
 
 from jmapy.models import ID
+from jmapy.orm.filtering import FilterCondition, FilterOperator
 
 
 def _to_camel(snake_str: str) -> str:
@@ -10,10 +20,38 @@ def _to_camel(snake_str: str) -> str:
     return words[0] + ''.join(w.title() for w in words[1:])
 
 
-def bind_arg(key: str, value: Any) -> dict[str, Any]:
-    if hasattr(value, "to_dict") and getattr(value, "result_of", None):
+@runtime_checkable
+class Serializable(Protocol):
+
+    def to_dict(self) -> dict[str, Any]: ...
+
+
+def bind_arg(key: str, value: Any, *, keep_none: bool = False) -> dict[str, Any]:
+    if value is None and not keep_none:
+        return {}
+
+    if isinstance(value, Mapping):
+        return {
+            key:
+            {
+                (item_key.to_dict() if isinstance(item_key, Serializable) else item_key): \
+                (item_value.to_dict() if isinstance(item_value, Serializable) else item_value)
+                for item_key, item_value in value.items()  # pyright: ignore[reportUnknownVariableType]
+            }
+        }
+
+    if isinstance(value, Iterable) and not isinstance(value, str):
+        return {
+            key: 
+            [
+                (item.to_dict() if isinstance(item, Serializable) else item)
+                for item in value  # pyright: ignore[reportUnknownVariableType]
+            ]
+        }
+
+    if isinstance(value, Serializable) and getattr(value, "result_of", None):
         return {f"#{key}": value.to_dict()}
-    elif hasattr(value, "to_dict"):
+    elif isinstance(value, Serializable):
         return {key: value.to_dict()}
     else:
         return {key: value}
@@ -27,17 +65,37 @@ def json_ptr_escape(part: str) -> str:
     )
 
 class Reference[T, P]:
-    def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "") -> None:
+    def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "", **kwargs: Any) -> None:
         self.nullable: bool = True
         self.result_of = result_of
         self.method_name = method_name
         self.path = path
         self.attr_name = attr_name
 
+    def __hash__(self) -> int:
+        return hash(self.path)
+
     def __set_name__(self, owner: Any, name: str) -> None:
         self.attr_name = name
         self.path = "/" + json_ptr_escape(
             _to_camel(name)
+        )
+
+    @override
+    def __eq__(self, value: P, /) -> FilterCondition:  # pyright: ignore[reportIncompatibleMethodOverride]
+        return FilterCondition(
+            self.attr_name,
+            value
+        )
+    
+    @override
+    def __ne__(self, value: P, /) -> FilterOperator:  # pyright: ignore[reportIncompatibleMethodOverride]
+        return FilterOperator(
+            "NOT",
+            [FilterCondition(
+                self.attr_name,
+                value
+            )]
         )
 
     @overload
@@ -98,6 +156,9 @@ class BoundListReferenceAll:
         self.result_of = result_of
         self.method_name = method_name
         self.path = path
+
+    def __hash__(self) -> int:
+        return hash(self.path)
         
     def __getattr__(self, name: str) -> Reference[Any, Any]:
         return Reference(
@@ -111,12 +172,15 @@ class BoundListReferenceAll:
 
 
 class ListReference[T, P]:
-    def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "") -> None:
+    def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "", **kwargs: Any) -> None:
         self.result_of = result_of
         self.method_name = method_name
         self.path = path
         self.attr_name = attr_name
         self.nullable = False
+
+    def __hash__(self) -> int:
+        return hash(self.path)
 
     def __set_name__(self, owner: Any, name: str) -> None:
         self.attr_name = name
@@ -147,7 +211,12 @@ class ListReference[T, P]:
                 path=f"{path_prefix}{self.path}",
                 attr_name=self.attr_name
             )
-        return obj.__dict__.get(self.attr_name, [])
+
+        value = obj.__dict__.get(self.attr_name, [])
+
+        if value is None and not self.nullable:
+            raise ValueError("Value not founded, but attribute is not nullable.")
+        return value
 
     def __getitem__(self, key: int) -> type[P]:
         return BoundListReferenceAll(self.result_of, self.method_name, f"{self.path}/{key}") # type: ignore
@@ -159,13 +228,35 @@ class ListReference[T, P]:
         return {"resultOf": self.result_of, "name": self.method_name, "path": self.path}
 
 
-class DictReference[T, V]:
-    def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "") -> None:
+class NullListReference[T, P](ListReference[T, P]):
+
+    def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "", **kwargs: Any) -> None:
+        super().__init__(
+            result_of=result_of,
+            method_name=method_name,
+            path=path,
+            attr_name=attr_name
+        )
+        self.nullable = True
+
+    @overload
+    def __get__(self, obj: None, objtype: type[T]) -> Self: ...
+    @overload
+    def __get__(self, obj: T, objtype: type[T] | None = None) -> list[P] | None: ...
+    def __get__(self, obj: T | None, objtype: type[T] | None = None) -> Self | list[P] | None:  # pyright: ignore[reportIncompatibleMethodOverride]
+        return super().__get__(obj, objtype)  # pyright: ignore[reportCallIssue, reportUnknownVariableType, reportArgumentType]
+
+
+class DictReference[T, K, V]:
+    def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "", **kwargs: Any) -> None:
         self.result_of = result_of
         self.method_name = method_name
         self.path = path
         self.attr_name = attr_name
         self.nullable = False
+
+    def __hash__(self) -> int:
+        return hash(self.path)
 
     def __set_name__(self, owner: Any, name: str) -> None:
         self.attr_name = name
@@ -177,9 +268,9 @@ class DictReference[T, V]:
     def __get__(self, obj: None, objtype: Any) -> Self: ...
 
     @overload
-    def __get__(self, obj: T, objtype: Any = None) -> dict[ID, V]: ...
+    def __get__(self, obj: T, objtype: Any = None) -> dict[K, V]: ...
 
-    def __get__(self, obj: T | None, objtype: Any = None) -> Self | dict[ID, V]:
+    def __get__(self, obj: T | None, objtype: Any = None) -> Self | dict[K, V]:
         if obj is None:
             call_id = getattr(objtype, '__call_id__', None)
             if not call_id:
@@ -202,7 +293,7 @@ class DictReference[T, V]:
         return {"resultOf": self.result_of, "name": self.method_name, "path": self.path}
 
 class DataTypeMeta(type):
-    __refs__: list[Reference[type, Any] | ListReference[type, Any] | DictReference[type, Any]]
+    __refs__: list[Reference[type, Any] | ListReference[type, Any] | DictReference[type, Any, Any]]
 
     def __new__(
         cls: type[type],
@@ -210,10 +301,10 @@ class DataTypeMeta(type):
         bases: tuple[type, ...],
         dct: dict[str, Any],
         **kwargs: Any
-    ) -> type:    
+    ) -> type:
         dct["__refs__"] = [
             val
-            for val in dct.items()
+            for val in dct.values()
             if isinstance(val, (Reference, ListReference, DictReference))
         ]
         new_cls = super().__new__(cls, name, bases, dct, **kwargs)  # pyright: ignore[reportCallIssue, reportUnknownVariableType]
@@ -224,12 +315,12 @@ class _DataType(metaclass=DataTypeMeta):
     def __init__(self, **kwargs: Any) -> None:
         for ref in self.__class__.__refs__:
             if ref.attr_name in kwargs:
-                setattr(self, ref.attr_name, kwargs[ref.attr_name])
+                self.__dict__[ref.attr_name] = kwargs[ref.attr_name]  # pyright: ignore[reportIndexIssue]
             elif ref.nullable:
                 setattr(self, ref.attr_name, None)
-            else:
-                msg = f"{self.__class__.__name__} missing keyword arguement: '{ref.attr_name}'"
-                raise TypeError(msg)
+            # else:
+            #     msg = f"{self.__class__.__name__} missing keyword arguement: '{ref.attr_name}'"
+            #     raise TypeError(msg)
 
 @dataclass_transform(field_specifiers=(Reference, ListReference, NullReference, DictReference))
 class DataType(_DataType): ...

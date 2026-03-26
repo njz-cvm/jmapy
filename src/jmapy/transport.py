@@ -1,10 +1,13 @@
 
+import datetime
 import json
-from typing import NewType, Self
+from typing import Any, Self
 
 from jmapy.models import ID
-from jmapy.orm.base import DataType, MethodChain, Reference, _DataType
+from jmapy.orm.base import DataType, MethodChain, Reference
+from jmapy.orm.filtering import or_
 from jmapy.orm.get import GettableData
+from jmapy.orm.query import QueryableData
 
 # session.request(
 #     Foo.changes(account_id, since_state).then(
@@ -30,27 +33,21 @@ from jmapy.orm.get import GettableData
 
 class User(GettableData): ...
 
-class Foo(GettableData, DataType):
+class Foo(GettableData, QueryableData, DataType):
     attr: Reference[Self, ID] = Reference[Self, ID]()
+    bar: Reference[Self, datetime.datetime] = Reference[Self, datetime.datetime]()
 
-class Bar(GettableData): ...
+class Bar(GettableData):
+    bar: Reference[Self, datetime.datetime] = Reference[Self, datetime.datetime]()
 
-foo = Foo(attr="id")
+foo = Foo(attr="id", bar=datetime.datetime.now())
 print(foo)
-
-def exec[T, *Ts](test: MethodChain[T, *Ts]) -> None:
-    print(
-        json.dumps(
-        [call[:-1] for call in test.calls], 
-        indent=2)
-    )
-
 
 if __name__ == "__main__":
     exec(
     User.get("12", ["223"]).then(
         lambda usr: Foo.get(usr.account_id, ["123"]).then(
         lambda foo: Bar.get(foo.account_id, foo.list.all.attr).then(
-        Foo.get("231", ["34"])
+        Foo.query("123", or_(Foo.attr == "123", Foo.attr == "321"), [Foo.bar])
         )))
     )

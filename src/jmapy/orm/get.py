@@ -1,5 +1,6 @@
 
 import uuid
+from collections.abc import Iterable
 from typing import Any, Self
 
 from jmapy.models import ID
@@ -25,8 +26,8 @@ class GettableData:
     def get(
         cls,
         account_id: ID | Reference[Any, ID],
-        ids: list[ID] | ListReference[Any, ID] | Reference[Any, ID],
-        properties: list[str] | None | ListReference[Any, str] | Reference[Any, str] = None,
+        ids: Iterable[ID] | ListReference[Any, ID] | Reference[Any, ID],
+        properties: Iterable[str] | None | ListReference[Any, str] | Reference[Any, str] = None,
     ) -> MethodChain[GetResponse[Self]]:
         method_name = f"{cls.__name__}/get"
         call_id = f"c_{uuid.uuid4().hex[:6]}"
@@ -38,7 +39,7 @@ class GettableData:
                     {
                         **bind_arg("accountId", account_id),
                         **bind_arg("ids", ids),
-                        **(bind_arg("properties", properties) if properties else {})
+                        **bind_arg("properties", properties)
                     },
                     call_id,
                     GetResponse

@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, Protocol, Self
+from typing import Any, Self
 
 from jmapy.models import ID
 
@@ -21,7 +21,7 @@ class ChangesResponse:
     updated = ListReference[Self, ID]()
     destroyed = ListReference[Self, ID]()
 
-class ChangableData(Protocol):
+class ChangableData:
     @classmethod
     def changes(
         cls,

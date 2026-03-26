@@ -1,6 +1,6 @@
 import uuid
-from collections.abc import Mapping, Sequence
-from typing import Any, Protocol, Self
+from collections.abc import Iterable, Mapping
+from typing import Any, Self
 
 from jmapy.models import ID
 from jmapy.orm.base import DictReference, ListReference, NullReference, Reference
@@ -21,25 +21,37 @@ class SetResponse[T](_DataType):
     account_id = Reference[Self, ID]()
     old_state= NullReference[Self, str | None]()
     new_state = Reference[Self, str]()
-    created = DictReference[Self, T]()
-    updated = DictReference[Self, T]()
+    created = DictReference[Self, ID, T]()
+    updated = DictReference[Self, ID, T]()
     destroyed = ListReference[Self, ID]()
-    not_created = DictReference[Self, SetError]()
-    not_updated = DictReference[Self, SetError]()
-    not_destroyed = DictReference[Self, SetError]()
+    not_created = DictReference[Self, ID, SetError]()
+    not_updated = DictReference[Self, ID, SetError]()
+    not_destroyed = DictReference[Self, ID, SetError]()
 
-class SettableData(Protocol):
+class SettableData:
     @classmethod
     def set(
         cls,
         account_id: ID | Reference[Any, ID],
-        if_in_state: str | None | Reference[Any, str],
-        create: Mapping[ID, Self] | None | Reference[Any, Mapping[ID, Self]] = None,
-        update: Mapping[ID, Mapping[Reference[Self, Any] | Self, Any]] | None = None,
-        destroy: Sequence[ID] | None = None,
+        if_in_state: str | None | Reference[Any, str] = None,
+        create: Mapping[ID, Self] | None | DictReference[Any, ID, Self] = None,
+        update: Mapping[ID, Mapping[Reference[Self, Any] | ListReference[Self, Any] | DictReference[Self, Any, Any], Any]] | None = None,
+        destroy: Iterable[ID] | None | ListReference[Any, ID] = None,
     ) -> MethodChain[SetResponse[Self]]:
         method_name = f"{cls.__name__}/set"
         call_id = f"c_{uuid.uuid4().hex[:6]}"
+
+        if isinstance(update, Mapping):
+            resolved_updates = {
+                id: {
+                    item_name.path.lstrip("/"): item_value
+                    for item_name, item_value in updates.items()
+                }
+                for id, updates in update.items()
+            }
+        else:
+            resolved_updates = update
+
 
         return MethodChain(
             [
@@ -47,8 +59,10 @@ class SettableData(Protocol):
                     method_name,
                     {
                         **bind_arg("accountId", account_id),
-                        **(bind_arg("ifInState", if_in_state) if if_in_state is not None else {}),
-                        **(bind_arg("properties", properties) if properties else {})
+                        **bind_arg("ifInState", if_in_state),
+                        **bind_arg("create", create),
+                        **bind_arg("update", resolved_updates),
+                        **bind_arg("destroy", destroy),
                     },
                     call_id,
                     SetResponse
