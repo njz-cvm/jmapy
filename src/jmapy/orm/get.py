@@ -5,6 +5,7 @@ from typing import Any, Self
 
 from jmapy.models import ID
 from jmapy.orm.base import ListReference, Reference
+from jmapy.orm.errors import CallError
 
 from .base import (
     MethodCall,
@@ -21,6 +22,9 @@ class GetResponse[T](_DataType):
     not_found = ListReference[Self, ID]()
 
 
+class TooManyIDs[T](CallError[GetResponse[T]]): ...
+
+
 class GettableData:
     @classmethod
     def get(
@@ -32,7 +36,7 @@ class GettableData:
         method_name = f"{cls.__name__}/get"
         call_id = f"c_{uuid.uuid4().hex[:6]}"
 
-        return MethodChain(
+        return MethodChain[GetResponse[Self]](
             [
                 MethodCall(
                     method_name,

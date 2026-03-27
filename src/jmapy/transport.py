@@ -43,11 +43,14 @@ class Bar(GettableData):
 foo = Foo(attr="id", bar=datetime.datetime.now())
 print(foo)
 
+def unpack[S, *Ts](chain: MethodChain[S, *Ts]) -> tuple[S, *Ts]: ...
+
 if __name__ == "__main__":
-    exec(
+    result = \
     User.get("12", ["223"]).then(
         lambda usr: Foo.get(usr.account_id, ["123"]).then(
         lambda foo: Bar.get(foo.account_id, foo.list.all.attr).then(
         Foo.query("123", or_(Foo.attr == "123", Foo.attr == "321"), [Foo.bar])
         )))
-    )
+
+    r = result.resolve(0)

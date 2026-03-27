@@ -292,6 +292,26 @@ class DictReference[T, K, V]:
     def to_dict(self) -> dict[str, str]:
         return {"resultOf": self.result_of, "name": self.method_name, "path": self.path}
 
+
+class NullDictReference[T, K, P](DictReference[T, K, P]):
+
+    def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "", **kwargs: Any) -> None:
+        super().__init__(
+            result_of=result_of,
+            method_name=method_name,
+            path=path,
+            attr_name=attr_name
+        )
+        self.nullable = True
+
+    @overload
+    def __get__(self, obj: None, objtype: type[T]) -> Self: ...
+    @overload
+    def __get__(self, obj: T, objtype: type[T] | None = None) -> dict[K, P] | None: ...
+    def __get__(self, obj: T | None, objtype: type[T] | None = None) -> Self | dict[K, P] | None:  # pyright: ignore[reportIncompatibleMethodOverride]
+        return super().__get__(obj, objtype)  # pyright: ignore[reportCallIssue, reportUnknownVariableType, reportArgumentType]
+
+
 class DataTypeMeta(type):
     __refs__: list[Reference[type, Any] | ListReference[type, Any] | DictReference[type, Any, Any]]
 
@@ -334,8 +354,21 @@ class MethodCall(NamedTuple):
 
 
 class MethodChain[S, *Ts]:
+    _calls: tuple[S, *Ts]
+
     def __init__(self, calls: list[MethodCall]):
         self.calls = calls
+
+    @overload
+    def resolve(self, target: type[int]) -> int | str: ...
+
+    @overload
+    def resolve(self, target: type[str]) -> str | list[str]: ...
+
+    @overload
+    def resolve[T](self, target: type[T]) -> T: ...
+
+    def resolve[T](self, target: type[T]) -> T | None | int | str | list[str]: ...
 
     @overload
     def then[T, *Rs](self, cmd: "Callable[[type[S]], MethodChain[T, *Rs]]") -> "MethodChain[S, T, *Rs, *Ts]": ...
