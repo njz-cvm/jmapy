@@ -12,11 +12,23 @@ from jmapy.capability.base import CapabilityType
 from jmapy.capability.core import CoreCapability
 from jmapy.errors import CapabilityNotSupported
 from jmapy.models import SessionResponse
+from jmapy.orm.base import MethodChain
+from jmapy.response import Response
 
 WELL_KNOWN_ENDPOINT = "/.well-known/jmap"
 
 
 class JMAPSession:
+
+    def __init__(self, session_values: SessionResponse, *capabilities: type[CapabilityType[Self, Any]]) -> None:
+        self._values: SessionResponse = session_values
+        self._setting_cache: tuple[str, dict[str, BaseModel]]
+        self.capabilities: dict[str, CapabilityType[Self, Any]] = {
+            capability.URN: capability(self)
+            for capability in capabilities
+        }
+        if CoreCapability.URN not in self.capabilities:
+            self.capabilities[CoreCapability.URN] = CoreCapability(self)
 
     @property
     def core(self) -> CoreCapability[Self]:
@@ -38,15 +50,7 @@ class JMAPSession:
 
         return self._setting_cache[1][urn]  # pyright: ignore[reportReturnType]
 
-    def __init__(self, *capabilities: type[CapabilityType[Self, Any]], session_values: SessionResponse) -> None:
-        self._values: SessionResponse = session_values
-        self._setting_cache: tuple[str, dict[str, BaseModel]]
-        self.capabilities: dict[str, CapabilityType[Self, Any]] = {
-            capability.URN: capability(self)
-            for capability in capabilities
-        }
-        if CoreCapability.URN not in self.capabilities:
-            self.capabilities[CoreCapability.URN] = CoreCapability(self)
+    async def execute[S, *Ts](self, chain: "MethodChain[S, *Ts]") -> Response[S, *Ts]: ...  # pyright: ignore[reportGeneralTypeIssues]
 
 
 async def _lookup_srv(
@@ -100,4 +104,4 @@ async def start_session(
         raise ValueError(msg)
 
     session = SessionResponse.model_validate_json(data, strict=False)
-    print(session)
+    return session

@@ -1,9 +1,10 @@
 
-from typing import ClassVar, Protocol
+from typing import TYPE_CHECKING, ClassVar, Protocol
 
 from pydantic import BaseModel
 
-from jmapy.session import JMAPSession
+if TYPE_CHECKING:
+    from jmapy.session import JMAPSession
 
 
 class CapabilityType[S: JMAPSession, B: BaseModel](Protocol):

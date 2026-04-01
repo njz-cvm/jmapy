@@ -6,6 +6,7 @@ from jmapy.models import ID
 from jmapy.orm.base import DictReference, ListReference, NullReference, Reference
 
 from .base import (
+    DEFAULT_ACCOUNT,
     MethodCall,
     MethodChain,
     _DataType,  # pyright: ignore[reportPrivateUsage]
@@ -32,11 +33,11 @@ class SettableData:
     @classmethod
     def set(
         cls,
-        account_id: ID | Reference[Any, ID],
         if_in_state: str | None | Reference[Any, str] = None,
         create: Mapping[ID, Self] | None | DictReference[Any, ID, Self] = None,
         update: Mapping[ID, Mapping[Reference[Self, Any] | ListReference[Self, Any] | DictReference[Self, Any, Any], Any]] | None = None,
         destroy: Iterable[ID] | None | ListReference[Any, ID] = None,
+        account_id: ID | Reference[Any, ID] | DEFAULT_ACCOUNT = DEFAULT_ACCOUNT(),
     ) -> MethodChain[SetResponse[Self]]:
         method_name = f"{cls.__name__}/set"
         call_id = f"c_{uuid.uuid4().hex[:6]}"
@@ -52,7 +53,6 @@ class SettableData:
         else:
             resolved_updates = update
 
-
         return MethodChain(
             [
                 MethodCall(
@@ -65,7 +65,8 @@ class SettableData:
                         **bind_arg("destroy", destroy),
                     },
                     call_id,
-                    SetResponse
+                    SetResponse,
+                    None
                 )
             ]
         )

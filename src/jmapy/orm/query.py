@@ -6,7 +6,14 @@ from typing import Any, Self
 from jmapy.models import ID
 from jmapy.orm.filtering import Comparator, FilterCondition, FilterOperator
 
-from .base import ListReference, MethodCall, MethodChain, Reference, bind_arg
+from .base import (
+    DEFAULT_ACCOUNT,
+    ListReference,
+    MethodCall,
+    MethodChain,
+    Reference,
+    bind_arg,
+)
 
 
 class QueryResponse:
@@ -25,7 +32,6 @@ class QueryableData:
     @classmethod
     def query(
         cls,
-        account_id: ID | Reference[Any, ID],
         filter: FilterOperator | FilterCondition | None = None,
         sort: Iterable[Comparator[Self] | QSortableReference] | None = None,
         position: int | None = None,
@@ -33,6 +39,7 @@ class QueryableData:
         anchor_offset: int | None = None,
         limit: int | None = None,
         calculate_total: bool | None = None,
+        account_id: ID | Reference[Any, ID] | DEFAULT_ACCOUNT = DEFAULT_ACCOUNT(),
     ) -> MethodChain[QueryResponse]:
         method_name = f"{cls.__name__}/query"
         call_id = f"c_{uuid.uuid4().hex[:6]}"
@@ -61,7 +68,8 @@ class QueryableData:
                         **bind_arg("calculateTotal", calculate_total),
                     },
                     call_id,
-                    QueryResponse
+                    QueryResponse,
+                    None
                 )
             ]
         )

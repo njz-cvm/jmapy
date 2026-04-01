@@ -44,7 +44,6 @@ class Todo(
 def test_keyword_match():
     request = dump_exec(
         Todo.query(
-            "x",
             or_(
                 Todo.has_keyword("music"),
                 Todo.has_keyword("video")
@@ -54,7 +53,6 @@ def test_keyword_match():
             limit = 10
         ).then(
         lambda query: Todo.get(
-            "x",
             query.ids
         )
         )
@@ -89,7 +87,6 @@ def test_keyword_match():
 def test_todo_set():
     request = dump_exec(
         Todo.set(
-            "x",
             if_in_state="10324",
             update={
                 "a": {
@@ -132,7 +129,6 @@ def test_todo_set():
 def test_todo_create():
     request = dump_exec(
         Todo.set(
-            "x",
             create={
                 "k15": Todo(title="Warm up with scales")
             },
@@ -163,12 +159,10 @@ def test_todo_create():
 def test_todo_changes():
     request = dump_exec(
         Todo.changes(
-            "x",
             "10324",
             50
         ).then(
             Todo.query_changes(
-            "x",
             filter=or_(
                 Todo.has_keyword("music"),
                 Todo.has_keyword("video")

@@ -1,6 +1,7 @@
 from collections.abc import Callable, Iterable, Mapping
 from typing import (
     Any,
+    Literal,
     NamedTuple,
     Protocol,
     Self,
@@ -10,7 +11,6 @@ from typing import (
     runtime_checkable,
 )
 
-from jmapy.models import ID
 from jmapy.orm.filtering import FilterCondition, FilterOperator
 
 
@@ -64,9 +64,13 @@ def json_ptr_escape(part: str) -> str:
         .replace("/", "~1")
     )
 
-class Reference[T, P]:
+class DEFAULT_ACCOUNT: ...
+
+class ReferenceBase[T, P]:
+    path: str
+
     def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "", **kwargs: Any) -> None:
-        self.nullable: bool = True
+        self.nullable: bool = False
         self.result_of = result_of
         self.method_name = method_name
         self.path = path
@@ -80,6 +84,19 @@ class Reference[T, P]:
         self.path = "/" + json_ptr_escape(
             _to_camel(name)
         )
+
+    def __set__(self, obj: T, value: P) -> None:
+        obj.__dict__[self.attr_name] = value
+
+    def to_dict(self) -> dict[str, str]:
+        """Serializes to an RFC 8620 Result Reference."""
+        return {"resultOf": self.result_of, "name": self.method_name, "path": self.path}
+
+
+class Reference[T, P](ReferenceBase[T, P]):
+
+    def __hash__(self) -> int:
+        return hash(self.path)
 
     @override
     def __eq__(self, value: P, /) -> FilterCondition:  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -124,12 +141,6 @@ class Reference[T, P]:
             raise ValueError("Value not founded, but attribute is not nullable.")
         return value  # pyright: ignore[reportReturnType]
 
-    def __set__(self, obj: T, value: P) -> None:
-        obj.__dict__[self.attr_name] = value
-
-    def to_dict(self) -> dict[str, str]:
-        """Serializes to an RFC 8620 Result Reference."""
-        return {"resultOf": self.result_of, "name": self.method_name, "path": self.path}
 
 class NullReference[T, P](Reference[T, P]):
 
@@ -171,22 +182,7 @@ class BoundListReferenceAll:
         )
 
 
-class ListReference[T, P]:
-    def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "", **kwargs: Any) -> None:
-        self.result_of = result_of
-        self.method_name = method_name
-        self.path = path
-        self.attr_name = attr_name
-        self.nullable = False
-
-    def __hash__(self) -> int:
-        return hash(self.path)
-
-    def __set_name__(self, owner: Any, name: str) -> None:
-        self.attr_name = name
-        self.path = "/" + json_ptr_escape(
-            _to_camel(name)
-        )
+class ListReference[T, P](ReferenceBase[T, P]):
 
     @property
     def all(self) -> type[P]: 
@@ -221,12 +217,6 @@ class ListReference[T, P]:
     def __getitem__(self, key: int) -> type[P]:
         return BoundListReferenceAll(self.result_of, self.method_name, f"{self.path}/{key}") # type: ignore
 
-    def __set__(self, obj: T, value: list[P]) -> None:
-        obj.__dict__[self.attr_name] = value
-
-    def to_dict(self) -> dict[str, str]:
-        return {"resultOf": self.result_of, "name": self.method_name, "path": self.path}
-
 
 class NullListReference[T, P](ListReference[T, P]):
 
@@ -247,22 +237,7 @@ class NullListReference[T, P](ListReference[T, P]):
         return super().__get__(obj, objtype)  # pyright: ignore[reportCallIssue, reportUnknownVariableType, reportArgumentType]
 
 
-class DictReference[T, K, V]:
-    def __init__(self, result_of: str = "", method_name: str = "", path: str = "", attr_name: str = "", **kwargs: Any) -> None:
-        self.result_of = result_of
-        self.method_name = method_name
-        self.path = path
-        self.attr_name = attr_name
-        self.nullable = False
-
-    def __hash__(self) -> int:
-        return hash(self.path)
-
-    def __set_name__(self, owner: Any, name: str) -> None:
-        self.attr_name = name
-        self.path = "/" + json_ptr_escape(
-            _to_camel(name)
-        )
+class DictReference[T, K, V](ReferenceBase[T, dict[K, V]]):
 
     @overload
     def __get__(self, obj: None, objtype: Any) -> Self: ...
@@ -285,12 +260,6 @@ class DictReference[T, K, V]:
                 attr_name=self.attr_name
             )
         return obj.__dict__.get(self.attr_name, {})
-
-    def __set__(self, obj: T, value: dict[ID, V]) -> None:
-        obj.__dict__[self.attr_name] = value
-
-    def to_dict(self) -> dict[str, str]:
-        return {"resultOf": self.result_of, "name": self.method_name, "path": self.path}
 
 
 class NullDictReference[T, K, P](DictReference[T, K, P]):
@@ -342,6 +311,12 @@ class _DataType(metaclass=DataTypeMeta):
             #     msg = f"{self.__class__.__name__} missing keyword arguement: '{ref.attr_name}'"
             #     raise TypeError(msg)
 
+    def raise_on_error(self) -> Self:
+        return self
+
+    def is_error(self) -> Literal[False]:
+        return False
+
 @dataclass_transform(field_specifiers=(Reference, ListReference, NullReference, DictReference))
 class DataType(_DataType): ...
 
@@ -351,24 +326,13 @@ class MethodCall(NamedTuple):
     args: dict[str, Any]
     call_id: str
     resp_cls: type[Any]
+    tag: str | None
 
 
 class MethodChain[S, *Ts]:
-    _calls: tuple[S, *Ts]
 
     def __init__(self, calls: list[MethodCall]):
         self.calls = calls
-
-    @overload
-    def resolve(self, target: type[int]) -> int | str: ...
-
-    @overload
-    def resolve(self, target: type[str]) -> str | list[str]: ...
-
-    @overload
-    def resolve[T](self, target: type[T]) -> T: ...
-
-    def resolve[T](self, target: type[T]) -> T | None | int | str | list[str]: ...
 
     @overload
     def then[T, *Rs](self, cmd: "Callable[[type[S]], MethodChain[T, *Rs]]") -> "MethodChain[S, T, *Rs, *Ts]": ...
@@ -389,3 +353,9 @@ class MethodChain[S, *Ts]:
             return MethodChain(self.calls + next_chain.calls)
         else:
             return MethodChain(self.calls + cmd.calls)
+
+    def tag(self, label: str) -> Self:
+        last_call = self.calls[-1]._asdict()
+        last_call["tag"] = label
+        self.calls[-1] = MethodCall(**last_call)
+        return self

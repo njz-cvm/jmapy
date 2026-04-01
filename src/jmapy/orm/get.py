@@ -8,6 +8,7 @@ from jmapy.orm.base import ListReference, Reference
 from jmapy.orm.errors import CallError
 
 from .base import (
+    DEFAULT_ACCOUNT,
     MethodCall,
     MethodChain,
     _DataType,  # pyright: ignore[reportPrivateUsage]
@@ -29,9 +30,9 @@ class GettableData:
     @classmethod
     def get(
         cls,
-        account_id: ID | Reference[Any, ID],
         ids: Iterable[ID] | ListReference[Any, ID] | Reference[Any, ID],
         properties: Iterable[str] | None | ListReference[Any, str] | Reference[Any, str] = None,
+        account_id: ID | Reference[Any, ID] | DEFAULT_ACCOUNT = DEFAULT_ACCOUNT(),
     ) -> MethodChain[GetResponse[Self]]:
         method_name = f"{cls.__name__}/get"
         call_id = f"c_{uuid.uuid4().hex[:6]}"
@@ -46,7 +47,8 @@ class GettableData:
                         **bind_arg("properties", properties)
                     },
                     call_id,
-                    GetResponse
+                    GetResponse,
+                    None
                 )
             ]
         )

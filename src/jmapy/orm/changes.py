@@ -4,6 +4,7 @@ from typing import Any, Self
 from jmapy.models import ID
 
 from .base import (
+    DEFAULT_ACCOUNT,
     ListReference,
     MethodCall,
     MethodChain,
@@ -25,9 +26,9 @@ class ChangableData:
     @classmethod
     def changes(
         cls,
-        account_id: ID | Reference[Any, ID],
         since_state: str | Reference[Any, str],
         max_changes: int | None | Reference[Any, int] = None,
+        account_id: ID | Reference[Any, ID] | DEFAULT_ACCOUNT = DEFAULT_ACCOUNT(),
     ) -> MethodChain[ChangesResponse]:
         method_name = f"{cls.__name__}/changes"
         call_id = f"c_{uuid.uuid4().hex[:6]}"
@@ -42,7 +43,8 @@ class ChangableData:
                         **(bind_arg("maxChanges", max_changes) if max_changes is not None else {})
                     },
                     call_id,
-                    ChangesResponse
+                    ChangesResponse,
+                    None
                 )
             ]
         )

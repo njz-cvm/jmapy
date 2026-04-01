@@ -7,7 +7,14 @@ from jmapy.models import ID
 from jmapy.orm.filtering import Comparator, FilterCondition, FilterOperator
 from jmapy.orm.query import QueryResponse
 
-from .base import ListReference, MethodCall, MethodChain, Reference, bind_arg
+from .base import (
+    DEFAULT_ACCOUNT,
+    ListReference,
+    MethodCall,
+    MethodChain,
+    Reference,
+    bind_arg,
+)
 
 
 class AddedItem:
@@ -30,13 +37,13 @@ class QueryChangableData:
     @classmethod
     def query_changes(
         cls,
-        account_id: ID | Reference[Any, ID],
         since_query_state: str,
         filter: FilterOperator | FilterCondition | None = None,
         sort: Iterable[Comparator[Self] | QCSortableReference] | None = None,
         max_changes: int | None = None,
         up_to_id: ID | None = None,
         calculate_total: bool | None = None,
+        account_id: ID | Reference[Any, ID] | DEFAULT_ACCOUNT = DEFAULT_ACCOUNT(),
     ) -> MethodChain[QueryResponse]:
         method_name = f"{cls.__name__}/queryChanges"
         call_id = f"c_{uuid.uuid4().hex[:6]}"
@@ -63,7 +70,8 @@ class QueryChangableData:
                         **bind_arg("calculateTotal", calculate_total),
                     },
                     call_id,
-                    QueryResponse
+                    QueryResponse,
+                    None
                 )
             ]
         )

@@ -55,7 +55,8 @@ class CopyableData:
                         **bind_arg("destroyFromIfInState", destroy_from_if_in_state),
                     },
                     call_id,
-                    CopyResponse
+                    CopyResponse,
+                    None
                 )
             ]
         )

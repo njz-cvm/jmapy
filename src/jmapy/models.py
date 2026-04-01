@@ -1,8 +1,13 @@
 import string
 from collections.abc import Callable
-from typing import Annotated, Any
+from typing import Annotated, Any, NamedTuple
 
-from pydantic import AfterValidator, BaseModel, Field, ValidationError
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    Field,
+    ValidationError,
+)
 from pydantic.alias_generators import to_camel
 
 ID_ALLOWED_CHARS = string.ascii_lowercase = string.ascii_uppercase + "-_"
@@ -75,6 +80,22 @@ class SessionResponse(BaseModel):
     upload_url: UploadUrl
     event_source_url: EventSourceUrl
     state: str
+
+    model_config = {
+        "alias_generator": to_camel
+    }
+
+
+class Invocation(NamedTuple):
+    name: str
+    data: dict[str, Any]
+    call_id: str
+
+
+class JMAPResponse(BaseModel):
+    method_responses: list[Invocation]
+    created_ids: dict[ID, ID] | None = None
+    session_state: str
 
     model_config = {
         "alias_generator": to_camel

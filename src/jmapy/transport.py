@@ -1,13 +1,16 @@
 
+import asyncio
 import datetime
-import json
-from typing import Any, Self
+from typing import Self
 
+from jmapy.auth import BasicLogin
+from jmapy.errors import GenericFailure, GetFailure
 from jmapy.models import ID
 from jmapy.orm.base import DataType, MethodChain, Reference
 from jmapy.orm.filtering import or_
-from jmapy.orm.get import GettableData
+from jmapy.orm.get import GetResponse, GettableData
 from jmapy.orm.query import QueryableData
+from jmapy.session import JMAPSession, start_session
 
 # session.request(
 #     Foo.changes(account_id, since_state).then(
@@ -41,16 +44,24 @@ class Bar(GettableData):
     bar: Reference[Self, datetime.datetime] = Reference[Self, datetime.datetime]()
 
 foo = Foo(attr="id", bar=datetime.datetime.now())
-print(foo)
 
-def unpack[S, *Ts](chain: MethodChain[S, *Ts]) -> tuple[S, *Ts]: ...
+def unpack[S, *Ts](chain: MethodChain[S, *Ts]) -> tuple[S, *Ts]:
+    return tuple(
+        c[:-1]
+        for c in chain.calls
+    )  # pyright: ignore[reportReturnType]
+
+async def _main():
+    session = JMAPSession(await start_session(BasicLogin("awd", "adw")))
+    result = await session.execute(
+        User.get(["223"]).then(
+        lambda usr: Foo.get(["123"]).tag("foo-got").then(
+        lambda foo: Bar.get(foo.list.all.attr).then(
+        Foo.query(or_(Foo.attr == "123", Foo.attr == "321"), [Foo.bar])
+        )))
+    )
+    values: GetResponse[Foo] | GenericFailure | GetFailure = result.get(GetResponse[Foo], "foo-got")
+    result = values.raise_on_error()
 
 if __name__ == "__main__":
-    result = \
-    User.get("12", ["223"]).then(
-        lambda usr: Foo.get(usr.account_id, ["123"]).then(
-        lambda foo: Bar.get(foo.account_id, foo.list.all.attr).then(
-        Foo.query("123", or_(Foo.attr == "123", Foo.attr == "321"), [Foo.bar])
-        )))
-
-    r = result.resolve(0)
+    asyncio.run(_main())
