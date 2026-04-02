@@ -5,7 +5,6 @@ from typing import Any, Self
 
 from jmapy.models import ID
 from jmapy.orm.filtering import Comparator, FilterCondition, FilterOperator
-from jmapy.orm.query import QueryResponse
 
 from .base import (
     DEFAULT_ACCOUNT,
@@ -18,16 +17,16 @@ from .base import (
 
 
 class AddedItem:
-    id = Reference[Self, ID]()
-    index = Reference[Self, int]()
+    id = Reference[Self, ID](ID)
+    index = Reference[Self, int](int)
 
 class QueryChangesResponse[T]:
-    account_id = Reference[Self, ID]()
-    old_query_state = Reference[Self, str]()
-    new_query_state = Reference[Self, str]()
-    total = Reference[Self, int]()
-    removed = ListReference[Self, ID]()
-    added = ListReference[Self, AddedItem]()
+    account_id = Reference[Self, ID](ID)
+    old_query_state = Reference[Self, str](str)
+    new_query_state = Reference[Self, str](str)
+    total = Reference[Self, int](int)
+    removed = ListReference[Self, ID](ID)
+    added = ListReference[Self, AddedItem](AddedItem)
 
 
 
@@ -44,7 +43,7 @@ class QueryChangableData:
         up_to_id: ID | None = None,
         calculate_total: bool | None = None,
         account_id: ID | Reference[Any, ID] | DEFAULT_ACCOUNT = DEFAULT_ACCOUNT(),
-    ) -> MethodChain[QueryResponse]:
+    ) -> MethodChain[QueryChangesResponse[Self]]:
         method_name = f"{cls.__name__}/queryChanges"
         call_id = f"c_{uuid.uuid4().hex[:6]}"
 
@@ -70,7 +69,7 @@ class QueryChangableData:
                         **bind_arg("calculateTotal", calculate_total),
                     },
                     call_id,
-                    QueryResponse,
+                    QueryChangesResponse[cls],
                     None
                 )
             ]

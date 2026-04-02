@@ -17,12 +17,12 @@ from .base import (
 
 
 class CopyResponse[T](_DataType):
-    from_account_id = Reference[Self, str]()
-    account_id = Reference[Self, str]()
-    old_state = NullReference[Self, str]()
-    new_state = Reference[Self, str]()
-    created = NullDictReference[Self, ID, T]()
-    not_created = NullDictReference[Self, ID, object]()  # TODO: Add this error
+    from_account_id = Reference[Self, str](str)
+    account_id = Reference[Self, str](str)
+    old_state = NullReference[Self, str](str)
+    new_state = Reference[Self, str](str)
+    created = NullDictReference[Self, ID, T](ID, T)
+    not_created = NullDictReference[Self, ID, object](ID, object)  # TODO: Add this error
 
 
 class CopyableData:
@@ -55,7 +55,7 @@ class CopyableData:
                         **bind_arg("destroyFromIfInState", destroy_from_if_in_state),
                     },
                     call_id,
-                    CopyResponse,
+                    CopyResponse[cls],
                     None
                 )
             ]

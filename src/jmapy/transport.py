@@ -3,47 +3,28 @@ import asyncio
 import datetime
 from typing import Self
 
+from pydantic import TypeAdapter
+
 from jmapy.auth import BasicLogin
 from jmapy.errors import GenericFailure, GetFailure
 from jmapy.models import ID
-from jmapy.orm.base import DataType, MethodChain, Reference
+from jmapy.orm.base import DataType, ListReference, MethodChain, Reference
 from jmapy.orm.filtering import or_
 from jmapy.orm.get import GetResponse, GettableData
 from jmapy.orm.query import QueryableData
 from jmapy.session import JMAPSession, start_session
 
-# session.request(
-#     Foo.changes(account_id, since_state).then(
-#         lambda resp: Foo.get(account_id, resp.created)
-#     )
-# )
-
-# session.request(
-#     Email.query(
-#         account_id,
-#         filter,
-#         sort,
-#         collapse_threads,
-#         position,
-#         limit,
-#         calculate_total
-#     ).then(
-#     lambda boxes: Email.get(account_id, boxes.ids).then(
-#     lambda emails: Thread.get(account_id, emails.list.all.thread_id).then(
-#     lambda threads: Email.get(account_id, threads.list.all.email_ids)
-#     )))
-# )
 
 class User(GettableData): ...
 
-class Foo(GettableData, QueryableData, DataType):
-    attr: Reference[Self, ID] = Reference[Self, ID]()
-    bar: Reference[Self, datetime.datetime] = Reference[Self, datetime.datetime]()
+class Foo[T](GettableData, QueryableData, DataType):
+    attr: Reference[Self, ID] = Reference[Self, ID](str)
+    bar: Reference[Self, datetime.datetime] = Reference[Self, datetime.datetime](datetime.datetime)
+    buzz: ListReference[Self, T] = ListReference[Self, T](T)
 
-class Bar(GettableData):
-    bar: Reference[Self, datetime.datetime] = Reference[Self, datetime.datetime]()
+class Bar(GettableData, DataType):
+    bar: Reference[Self, datetime.datetime] = Reference[Self, datetime.datetime](datetime.datetime)
 
-foo = Foo(attr="id", bar=datetime.datetime.now())
 
 def unpack[S, *Ts](chain: MethodChain[S, *Ts]) -> tuple[S, *Ts]:
     return tuple(
@@ -52,6 +33,31 @@ def unpack[S, *Ts](chain: MethodChain[S, *Ts]) -> tuple[S, *Ts]:
     )  # pyright: ignore[reportReturnType]
 
 async def _main():
+    ta = TypeAdapter[Foo[Bar]](Foo[Bar])
+    res = ta.validate_python({
+        "bar": "2026-04-02T15:06:52+0000",
+        "buzz": [{"bar": "2026-04-02T15:06:52+0000"}, {"bar": "2026-04-02T15:06:52+0000"}]
+    })
+
+    chain = Foo[Bar].get(["123"])
+    ta2 = TypeAdapter[GetResponse[Foo[Bar]]](chain.calls[0].resp_cls)
+    res2 = (
+        ta2.validate_python({
+            "accountId": "awd",
+            "state": "awd",
+            "list": [{
+                "bar": "2026-04-02T15:06:52+0000",
+                "buzz": [{"bar": "2026-04-02T15:06:52+0000"}, {"bar": "2026-04-02T15:06:52+0000"}]
+            }],
+            "notFound": ["B123"]
+        })
+    )
+    breakpoint()
+
+    print(res)
+    print(res.bar.hour)
+    exit(0)
+
     session = JMAPSession(await start_session(BasicLogin("awd", "adw")))
     result = await session.execute(
         User.get(["223"]).then(

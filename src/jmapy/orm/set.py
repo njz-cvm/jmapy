@@ -14,20 +14,20 @@ from .base import (
 )
 
 
-class SetError:
-    type = Reference[Self, str]()
-    description = Reference[Self, str | None]()
+class SetError(_DataType):
+    type = Reference[Self, str](str)
+    description = Reference[Self, str | None](str | None)
 
 class SetResponse[T](_DataType):
-    account_id = Reference[Self, ID]()
-    old_state= NullReference[Self, str | None]()
-    new_state = Reference[Self, str]()
-    created = DictReference[Self, ID, T]()
-    updated = DictReference[Self, ID, T]()
-    destroyed = ListReference[Self, ID]()
-    not_created = DictReference[Self, ID, SetError]()
-    not_updated = DictReference[Self, ID, SetError]()
-    not_destroyed = DictReference[Self, ID, SetError]()
+    account_id = Reference[Self, ID](ID)
+    old_state= NullReference[Self, str | None](str | None)
+    new_state = Reference[Self, str](str)
+    created = DictReference[Self, ID, T](ID, T)
+    updated = DictReference[Self, ID, T](ID, T)
+    destroyed = ListReference[Self, ID](ID)
+    not_created = DictReference[Self, ID, SetError](ID, SetError)
+    not_updated = DictReference[Self, ID, SetError](ID, SetError)
+    not_destroyed = DictReference[Self, ID, SetError](ID, SetError)
 
 class SettableData:
     @classmethod
@@ -65,7 +65,7 @@ class SettableData:
                         **bind_arg("destroy", destroy),
                     },
                     call_id,
-                    SetResponse,
+                    SetResponse[cls],
                     None
                 )
             ]

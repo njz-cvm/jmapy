@@ -17,10 +17,10 @@ from .base import (
 
 
 class GetResponse[T](_DataType):
-    account_id = Reference[Self, str]()
-    state = Reference[Self, str]()
-    list = ListReference[Self, T]()
-    not_found = ListReference[Self, ID]()
+    account_id = Reference[Self, str](str)
+    state = Reference[Self, str](str)
+    list = ListReference[Self, T](T)
+    not_found = ListReference[Self, ID](ID)
 
 
 class TooManyIDs[T](CallError[GetResponse[T]]): ...
@@ -47,7 +47,7 @@ class GettableData:
                         **bind_arg("properties", properties)
                     },
                     call_id,
-                    GetResponse,
+                    GetResponse[cls],
                     None
                 )
             ]

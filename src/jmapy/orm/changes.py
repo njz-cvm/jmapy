@@ -14,13 +14,13 @@ from .base import (
 
 
 class ChangesResponse:
-    account_id = Reference[Self, ID]()
-    old_state = Reference[Self, str]()
-    new_state = Reference[Self, str]()
-    has_more_changes = Reference[Self, bool]()
-    created = ListReference[Self, ID]()
-    updated = ListReference[Self, ID]()
-    destroyed = ListReference[Self, ID]()
+    account_id = Reference[Self, ID](ID)
+    old_state = Reference[Self, str](str)
+    new_state = Reference[Self, str](str)
+    has_more_changes = Reference[Self, bool](bool)
+    created = ListReference[Self, ID](ID)
+    updated = ListReference[Self, ID](ID)
+    destroyed = ListReference[Self, ID](ID)
 
 class ChangableData:
     @classmethod
