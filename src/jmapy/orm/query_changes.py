@@ -12,15 +12,16 @@ from .base import (
     MethodCall,
     MethodChain,
     Reference,
+    _DataType,  # pyright: ignore[reportPrivateUsage]
     bind_arg,
 )
 
 
-class AddedItem:
+class AddedItem(_DataType):
     id = Reference[Self, ID](ID)
     index = Reference[Self, int](int)
 
-class QueryChangesResponse[T]:
+class QueryChangesResponse[T](_DataType):
     account_id = Reference[Self, ID](ID)
     old_query_state = Reference[Self, str](str)
     new_query_state = Reference[Self, str](str)

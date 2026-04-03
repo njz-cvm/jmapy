@@ -1,5 +1,4 @@
 
-import uuid
 from typing import Any, Self
 
 from jmapy.models import ID
@@ -9,6 +8,7 @@ from .base import (
     DictReference,
     MethodCall,
     MethodChain,
+    MethodResponse,
     NullDictReference,
     NullReference,
     _DataType,  # pyright: ignore[reportPrivateUsage]
@@ -25,7 +25,7 @@ class CopyResponse[T](_DataType):
     not_created = NullDictReference[Self, ID, object](ID, object)  # TODO: Add this error
 
 
-class CopyableData:
+class CopyableData(MethodResponse):
 
     @classmethod
     def copy(
@@ -38,13 +38,11 @@ class CopyableData:
         on_success_destroy_original: bool | Reference[Any, bool] | None = None,
         destroy_from_if_in_state: str | Reference[Any, str] | None = None,
     ) -> MethodChain[CopyResponse[Self]]:
-        method_name = f"{cls.__name__}/copy"
-        call_id = f"c_{uuid.uuid4().hex[:6]}"
 
         return MethodChain(
             [
                 MethodCall(
-                    method_name,
+                    f"{cls.__name__}/copy",
                     {
                         **bind_arg("fromAccountId", from_account_id),
                         **bind_arg("ifFromInState", if_from_in_state),
@@ -54,7 +52,7 @@ class CopyableData:
                         **bind_arg("onSuccessDestroyOriginal", on_success_destroy_original),
                         **bind_arg("destroyFromIfInState", destroy_from_if_in_state),
                     },
-                    call_id,
+                    cls.__new_call_id__(),
                     CopyResponse[cls],
                     None
                 )

@@ -12,11 +12,12 @@ from .base import (
     MethodCall,
     MethodChain,
     Reference,
+    _DataType,  # pyright: ignore[reportPrivateUsage]
     bind_arg,
 )
 
 
-class QueryResponse:
+class QueryResponse(_DataType):
     account_id = Reference[Self, ID](ID)
     query_state = Reference[Self, str](str)
     can_calculate_changes = Reference[Self, bool](bool)

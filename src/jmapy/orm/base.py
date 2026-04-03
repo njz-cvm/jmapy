@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Callable, Iterable, Mapping
 from typing import (
     TYPE_CHECKING,
@@ -461,6 +462,15 @@ class _DataType(metaclass=DataTypeMeta):
             elif ref.nullable:
                 setattr(self, ref.attr_name, None)
 
+    def __repr__(self) -> str:
+        all_props: list[str] = []
+        for ref in self.__class__.__refs__:
+            if isinstance(val := self.__dict__[ref.attr_name], DataTypeMeta.UNSET):
+                all_props.append(f"{ref.attr_name}=<Not Provided>")
+            else:
+                all_props.append(f"{ref.attr_name}={val}")
+        return f"{self.__class__.__name__}({', '.join(all_props)})"
+
     def raise_on_error(self) -> Self:
         return self
 
@@ -469,6 +479,13 @@ class _DataType(metaclass=DataTypeMeta):
 
 @dataclass_transform(field_specifiers=(Reference, ListReference, NullReference, DictReference))
 class DataType(_DataType): ...
+
+
+class MethodResponse(Protocol):
+
+    @classmethod
+    def __new_call_id__(cls) -> str:
+        return f"c_{uuid.uuid4().hex[:6]}"
 
 
 class MethodCall(NamedTuple):

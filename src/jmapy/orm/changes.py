@@ -1,4 +1,3 @@
-import uuid
 from typing import Any, Self
 
 from jmapy.models import ID
@@ -8,12 +7,14 @@ from .base import (
     ListReference,
     MethodCall,
     MethodChain,
+    MethodResponse,
     Reference,
+    _DataType,  # pyright: ignore[reportPrivateUsage]
     bind_arg,
 )
 
 
-class ChangesResponse:
+class ChangesResponse(_DataType):
     account_id = Reference[Self, ID](ID)
     old_state = Reference[Self, str](str)
     new_state = Reference[Self, str](str)
@@ -22,7 +23,8 @@ class ChangesResponse:
     updated = ListReference[Self, ID](ID)
     destroyed = ListReference[Self, ID](ID)
 
-class ChangableData:
+class ChangableData(MethodResponse):
+
     @classmethod
     def changes(
         cls,
@@ -30,19 +32,17 @@ class ChangableData:
         max_changes: int | None | Reference[Any, int] = None,
         account_id: ID | Reference[Any, ID] | DEFAULT_ACCOUNT = DEFAULT_ACCOUNT(),
     ) -> MethodChain[ChangesResponse]:
-        method_name = f"{cls.__name__}/changes"
-        call_id = f"c_{uuid.uuid4().hex[:6]}"
 
         return MethodChain(
             [
                 MethodCall(
-                    method_name,
+                    f"{cls.__name__}/changes",
                     {
                         **bind_arg("accountId", account_id),
                         **bind_arg("sinceState", since_state),
                         **(bind_arg("maxChanges", max_changes) if max_changes is not None else {})
                     },
-                    call_id,
+                    cls.__new_call_id__(),
                     ChangesResponse,
                     None
                 )

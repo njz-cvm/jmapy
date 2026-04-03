@@ -1,5 +1,7 @@
 
 from collections.abc import Sequence
+from contextlib import AbstractAsyncContextManager
+from types import TracebackType
 from typing import Any, Self
 
 from aiodns import DNSResolver
@@ -20,8 +22,9 @@ WELL_KNOWN_ENDPOINT = "/.well-known/jmap"
 
 class JMAPSession:
 
-    def __init__(self, session_values: SessionResponse, *capabilities: type[CapabilityType[Self, Any]]) -> None:
+    def __init__(self, session_values: SessionResponse, client: ClientSession, *capabilities: type[CapabilityType[Self, Any]]) -> None:
         self._values: SessionResponse = session_values
+        self.client: ClientSession = client
         self._setting_cache: tuple[str, dict[str, BaseModel]]
         self.capabilities: dict[str, CapabilityType[Self, Any]] = {
             capability.URN: capability(self)
@@ -30,6 +33,31 @@ class JMAPSession:
         if CoreCapability.URN not in self.capabilities:
             self.capabilities[CoreCapability.URN] = CoreCapability(self)
 
+        self.type_registry: dict[str, str]
+        self._running: list[AbstractAsyncContextManager[None, bool | None]] = []
+
+        for capability in self.capabilities.values():
+            self.type_registry.update(
+                dict.fromkeys((d.__name__ for d in capability.DATA_TYPES), capability.URN)
+            )
+
+    async def __aenter__(self) -> Self:
+        if self._running:
+            msg = "JMAP Session is already running, cannot start again."
+            raise RuntimeError(msg)
+
+        for capability in self.capabilities.values():
+            self._running.append(capability.lifespan())
+            await self._running[-1].__aenter__()
+
+        return self
+
+    async def __aexit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None):
+        for lifetime in self._running:
+            _ = await lifetime.__aexit__(exc_type, exc_val, exc_tb)
+        self._running.clear()
+        return False
+
     @property
     def core(self) -> CoreCapability[Self]:
         return self.capabilities[CoreCapability.URN]  # pyright: ignore[reportReturnType]
@@ -37,6 +65,10 @@ class JMAPSession:
     @property
     def state(self) -> str:
         return self._values.state
+
+    @property
+    def api_url(self) -> str:
+        return self._values.api_url
 
     def setting[T: BaseModel](self, urn: str, model: type[T]) -> T:
         if self._setting_cache[0] != self.state:
