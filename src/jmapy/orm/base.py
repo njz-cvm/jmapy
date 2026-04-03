@@ -371,7 +371,7 @@ class DataTypeMeta(type):
                     type_cls = type_mapping.get(ref.__ref_type__, ref.__ref_type__)  # pyright: ignore[reportUnknownMemberType, reportCallIssue, reportArgumentType, reportUnknownVariableType]
 
                 fields[ref.attr_name] = (
-                    type_cls,
+                    type_cls if not ref.nullable else (type_cls | None),
                     Field(
                         default=None if ref.nullable else cls.UNSET(),  # pyright: ignore[reportUnknownArgumentType]
                         alias=_to_camel(ref.attr_name)
@@ -396,7 +396,7 @@ class _DataType(metaclass=DataTypeMeta):
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
-        fields: dict[str, tuple[type | TypeVar, Any]] = {}
+        fields: dict[str, tuple[Any, Any]] = {}
         
         for ref in cls.__refs__:
             if isinstance(ref, DictReference):
@@ -407,7 +407,7 @@ class _DataType(metaclass=DataTypeMeta):
                 type_cls = ref.__ref_type__
 
             fields[ref.attr_name] = (
-                type_cls,
+                type_cls if not ref.nullable else (type_cls | None),
                 Field(
                     default=None if ref.nullable else cls.UNSET(),
                     alias=_to_camel(ref.attr_name)
@@ -468,7 +468,7 @@ class _DataType(metaclass=DataTypeMeta):
             if isinstance(val := self.__dict__[ref.attr_name], DataTypeMeta.UNSET):
                 all_props.append(f"{ref.attr_name}=<Not Provided>")
             else:
-                all_props.append(f"{ref.attr_name}={val}")
+                all_props.append(f"{ref.attr_name}={repr(val)}")
         return f"{self.__class__.__name__}({', '.join(all_props)})"
 
     def raise_on_error(self) -> Self:

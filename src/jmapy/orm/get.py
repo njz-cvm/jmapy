@@ -11,6 +11,7 @@ from .base import (
     DEFAULT_ACCOUNT,
     MethodCall,
     MethodChain,
+    NullListReference,
     _DataType,  # pyright: ignore[reportPrivateUsage]
     bind_arg,
 )
@@ -30,7 +31,7 @@ class GettableData:
     @classmethod
     def get(
         cls,
-        ids: Iterable[ID] | ListReference[Any, ID] | Reference[Any, ID],
+        ids: Iterable[ID] | NullListReference[Any, ID] | None = None,
         properties: Iterable[str] | None | ListReference[Any, str] | Reference[Any, str] = None,
         account_id: ID | Reference[Any, ID] | DEFAULT_ACCOUNT = DEFAULT_ACCOUNT(),
     ) -> MethodChain[GetResponse[Self]]:
@@ -43,7 +44,7 @@ class GettableData:
                     method_name,
                     {
                         **bind_arg("accountId", account_id),
-                        **bind_arg("ids", ids),
+                        **bind_arg("ids", ids, keep_none=True),
                         **bind_arg("properties", properties)
                     },
                     call_id,

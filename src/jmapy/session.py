@@ -14,7 +14,7 @@ from jmapy.capability.base import CapabilityType
 from jmapy.capability.core import CoreCapability
 from jmapy.errors import CapabilityNotSupported
 from jmapy.models import SessionResponse
-from jmapy.orm.base import MethodChain
+from jmapy.orm.base import DEFAULT_ACCOUNT, MethodChain
 from jmapy.response import Response
 
 WELL_KNOWN_ENDPOINT = "/.well-known/jmap"
@@ -92,6 +92,15 @@ class JMAPSession:
         if not self._running:
             msg = "This JMAP session has not started, unable to execute request."
             raise RuntimeError(msg)
+
+        for call in chain.calls:
+            for key, value in call.args.items():
+                if not isinstance(value, DEFAULT_ACCOUNT):
+                    continue
+
+                capacity = self.type_registry[call.method_name.split("/")[0]]
+                default_account = self._values.primary_accounts[capacity]
+                call.args[key] = default_account
 
         jmap_resp = await self.core.make_request(chain)  # pyright: ignore[reportArgumentType]
         return Response(jmap_resp, tuple(chain.calls))
