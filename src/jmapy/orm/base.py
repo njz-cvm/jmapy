@@ -481,7 +481,7 @@ class _DataType(metaclass=DataTypeMeta):
 class DataType(_DataType): ...
 
 
-class MethodResponse(Protocol):
+class MethodResponse:
 
     @classmethod
     def __new_call_id__(cls) -> str:

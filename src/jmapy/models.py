@@ -93,10 +93,11 @@ class Invocation(NamedTuple):
 
 
 class JMAPResponse(BaseModel):
-    method_responses: list[Invocation]
+    method_responses: tuple[Invocation]
     created_ids: dict[ID, ID] | None = None
     session_state: str
 
     model_config = {
-        "alias_generator": to_camel
+        "alias_generator": to_camel,
+        "frozen": True,
     }

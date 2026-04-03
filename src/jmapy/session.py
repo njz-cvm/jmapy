@@ -22,10 +22,11 @@ WELL_KNOWN_ENDPOINT = "/.well-known/jmap"
 
 class JMAPSession:
 
-    def __init__(self, session_values: SessionResponse, client: ClientSession, *capabilities: type[CapabilityType[Self, Any]]) -> None:
+    def __init__(self, auth: AccountAuthProtocol, session_values: SessionResponse, client: ClientSession, *capabilities: type[CapabilityType[Self, Any]]) -> None:
         self._values: SessionResponse = session_values
-        self.client: ClientSession = client
-        self._setting_cache: tuple[str, dict[str, BaseModel]]
+        self.auth: AccountAuthProtocol = auth
+        self._setting_cache_state: str = session_values.state
+        self._setting_cache: dict[str, BaseModel] = {}
         self.capabilities: dict[str, CapabilityType[Self, Any]] = {
             capability.URN: capability(self)
             for capability in capabilities
@@ -33,13 +34,17 @@ class JMAPSession:
         if CoreCapability.URN not in self.capabilities:
             self.capabilities[CoreCapability.URN] = CoreCapability(self)
 
-        self.type_registry: dict[str, str]
+        self.type_registry: dict[str, str] = {}
         self._running: list[AbstractAsyncContextManager[None, bool | None]] = []
 
         for capability in self.capabilities.values():
             self.type_registry.update(
                 dict.fromkeys((d.__name__ for d in capability.DATA_TYPES), capability.URN)
             )
+
+    @property
+    def client(self) -> ClientSession:
+        return ClientSession(middlewares=[self.auth.middleware])
 
     async def __aenter__(self) -> Self:
         if self._running:
@@ -71,18 +76,25 @@ class JMAPSession:
         return self._values.api_url
 
     def setting[T: BaseModel](self, urn: str, model: type[T]) -> T:
-        if self._setting_cache[0] != self.state:
-            self._setting_cache[1].clear()
+        if self._setting_cache_state != self.state:
+            self._setting_cache.clear()
+            self._setting_cache_state = self.state
 
-        if urn not in self._setting_cache[1]:
+        if urn not in self._setting_cache:
             if urn not in self._values.capabilities:
                 raise CapabilityNotSupported(urn)
-            settings = model.model_validate(self._setting_cache[1][urn])
-            self._setting_cache[1][urn] = settings
+            settings = model.model_validate(self._values.capabilities[urn])
+            self._setting_cache[urn] = settings
 
-        return self._setting_cache[1][urn]  # pyright: ignore[reportReturnType]
+        return self._setting_cache[urn]  # pyright: ignore[reportReturnType]
 
-    async def execute[S, *Ts](self, chain: "MethodChain[S, *Ts]") -> Response[S, *Ts]: ...  # pyright: ignore[reportGeneralTypeIssues]
+    async def execute[S, *Ts](self, chain: "MethodChain[S, *Ts]") -> Response[S, *Ts]:
+        if not self._running:
+            msg = "This JMAP session has not started, unable to execute request."
+            raise RuntimeError(msg)
+
+        jmap_resp = await self.core.make_request(chain)  # pyright: ignore[reportArgumentType]
+        return Response(jmap_resp, tuple(chain.calls))
 
 
 async def _lookup_srv(
@@ -102,12 +114,13 @@ async def _lookup_srv(
             if isinstance(record.data, SRVRecordData)
         ]
 
-async def start_session(
+async def start_session[S: JMAPSession](
     auth_provider: AccountAuthProtocol,
-    *capabilities: str,
+    *capabilities: type[CapabilityType[S, Any]],
     jmap_session_endpoint: str | None = None,
     nameservers: Sequence[str] | None = None,
-):
+    session_cls: type[S] = JMAPSession,
+) -> S:
     if jmap_session_endpoint is not None:
         servers = [jmap_session_endpoint]
     elif auth_provider.domain is not None:
@@ -120,14 +133,14 @@ async def start_session(
         msg = "Unable determine JMAP session API location. Could not infer from auth provider, and endpoint not set manually using `jmap_session_endpoint`."
         raise ValueError(msg)
 
-    async with ClientSession(middlewares=(auth_provider.middleware,)) as session:
+    client_session = ClientSession(middlewares=(auth_provider.middleware,))
+
+    async with client_session as session:
         data = None
 
         for server in servers:
             resp = await session.get(server, allow_redirects=True)
             if resp.status != 200:
-                print(await resp.json())
-                breakpoint()
                 continue
             data = await resp.content.read()
             
@@ -135,5 +148,5 @@ async def start_session(
         msg = "No JMAP Session APIs returned a successful response. Unable to configure session."
         raise ValueError(msg)
 
-    session = SessionResponse.model_validate_json(data, strict=False)
-    return session
+    resp = SessionResponse.model_validate_json(data, strict=False)
+    return session_cls(auth_provider, resp, client_session, *capabilities)  # pyright: ignore[reportArgumentType]

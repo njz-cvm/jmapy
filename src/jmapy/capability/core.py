@@ -3,10 +3,10 @@ import asyncio
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from pydantic import BaseModel
-from pydantic.alias_generators import to_snake
+from pydantic.alias_generators import to_camel
 
 from jmapy.models import ID, JMAPResponse
 from jmapy.orm.base import (
@@ -39,7 +39,7 @@ class CoreSessionSettings(BaseModel):
     collation_algorithms: list[str]
 
     model_config = {
-        "alias_generator": to_snake
+        "alias_generator": to_camel
     }
 
 
@@ -105,7 +105,7 @@ class CoreCapability[S: JMAPSession](CapabilityType[S, CoreSessionSettings]):
     INTERNAL_WORKER_CAP: int = 20
     URN = "urn:ietf:params:jmap:core"
     DATA_TYPES = [Blob, Core]
-    SessionInformation = ClassVar[CoreSessionSettings]
+    SessionInformation = CoreSessionSettings
 
     _state_token: str
     _backlog: asyncio.Queue[tuple[MethodChain[Any, Any], asyncio.Future[JMAPResponse]]]
@@ -116,6 +116,7 @@ class CoreCapability[S: JMAPSession](CapabilityType[S, CoreSessionSettings]):
         self.session = session
         self._backlog = asyncio.Queue()
         self._workers = set()
+        self._workers_stops = set()
 
     async def _add_worker(self, index: int):
         stop_signal = asyncio.Event()
@@ -159,20 +160,24 @@ class CoreCapability[S: JMAPSession](CapabilityType[S, CoreSessionSettings]):
         )
 
         async with self.session.client as session:
-            resp = await session.post(
-                self.session.api_url,
-                data = {
-                    "using": urns,
+            body = {
+                    "using":[*urns],
                     "methodCalls": [
-                        call[:3]
+                        [*call[:3]]
                         for call in methods.calls
                     ]
                 }
+
+            resp = await session.post(
+                self.session.api_url,
+                headers={"Content-Type": "application/json"},
+                json = body
             )
-            return JMAPResponse.model_validate_json(await resp.content.read())
+            content = await resp.content.read()
+            return JMAPResponse.model_validate_json(content)
 
     @asynccontextmanager
-    async def lifespan(self) -> AsyncGenerator[None]:
+    async def lifespan(self) -> AsyncGenerator[None]:  # pyright: ignore[reportIncompatibleMethodOverride]
         for i in range(self.settings.max_concurrent_requests):
             await self._add_worker(i)
         yield
@@ -180,7 +185,7 @@ class CoreCapability[S: JMAPSession](CapabilityType[S, CoreSessionSettings]):
         for signal in self._workers_stops:
             signal.set()
 
-        _ = asyncio.gather(*self._workers)
+        _ = await asyncio.gather(*self._workers)
 
     async def _core_worker(self, stop_signal: asyncio.Event) -> None:
         wait_to_end = asyncio.create_task(stop_signal.wait())

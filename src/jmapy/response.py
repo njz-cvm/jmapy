@@ -1,5 +1,4 @@
 
-from functools import lru_cache
 from typing import overload
 
 from attr import dataclass
@@ -33,10 +32,10 @@ JMAPY_VALIDATION_ERROR_MAP = {
 }
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class Response[S, *Ts]:
     _responses: JMAPResponse
-    _call: list[MethodCall]
+    _call: tuple[MethodCall, ...]
 
     @overload
     def get[V](self, resp_cls: type[GetResponse[V]], tag: str | None = None) -> GetResponse[V] | GenericFailure | GetFailure: ...
@@ -80,7 +79,6 @@ class Response[S, *Ts]:
     @overload
     def get[R](self, resp_cls: type[R], *, index: int | None = None) -> R | GenericFailure: ...
 
-    @lru_cache()
     def get[R](self, resp_cls: type[R], tag: str | None = None, *, index: int | None = None) ->  R | GenericFailure \
         | GetFailure | ChangesFailure | SetFailure | CopyFailure | QueryFailure | QueryChangesFailure:
 
@@ -120,7 +118,6 @@ class Response[S, *Ts]:
         adapter = TypeAdapter[validation_targets](validation_targets)  # pyright: ignore[reportUnknownVariableType]
         return adapter.validate_python(target_response.data)  # pyright: ignore[reportReturnType, reportUnknownVariableType]
 
-    @lru_cache(maxsize=1)
     def expect_all(self) -> tuple[S, *Ts]:
         return tuple(
             TypeAdapter[call.resp_cls](call.resp_cls).validate_python(resp.data)
